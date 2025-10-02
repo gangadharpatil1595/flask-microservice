@@ -1,10 +1,11 @@
 pipeline {
     agent any
 
-    environment {
-        DOCKER_IMAGE = "gangadhar369/flask-microservice"
-        DOCKER_TAG   = "latest"
-    }
+  environment {
+    DOCKER_IMAGE = "gangadhar369/flask-microservice"
+    DOCKER_TAG   = "${env.BUILD_NUMBER}"
+}
+
 
     stages {
         stage('Checkout') {
