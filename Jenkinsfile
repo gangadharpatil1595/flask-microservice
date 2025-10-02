@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         DOCKER_IMAGE   = "gangadhar369/flask-microservice"
-        DOCKER_TAG     = "${BUILD_NUMBER}"
+        DOCKER_CRED_ID = "dockerhub-cred"      // your DockerHub credentials ID in Jenkins
         AWS_REGION     = "ap-south-1"
         K8S_NAMESPACE  = "flask-app"
     }
@@ -11,28 +11,27 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/gangadharpatil1595/flask-microservice.git'
+                git branch: 'main',
+                    url: 'https://github.com/gangadharpatil1595/flask-microservice.git'
             }
         }
 
         stage('Build Docker Image') {
             steps {
                 sh """
-                   docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
-                   docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest
+                    docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .
+                    docker tag ${DOCKER_IMAGE}:${BUILD_NUMBER} ${DOCKER_IMAGE}:latest
                 """
             }
         }
 
-        stage('Push to DockerHub') {
+        stage('Push Docker Image') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-cred',
-                                                 usernameVariable: 'DOCKER_USER',
-                                                 passwordVariable: 'DOCKER_PASS')]) {
+                withCredentials([usernamePassword(credentialsId: "${DOCKER_CRED_ID}", usernameVariable: "USER", passwordVariable: "PASS")]) {
                     sh """
-                       echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                       docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
-                       docker push ${DOCKER_IMAGE}:latest
+                        echo "$PASS" | docker login -u "$USER" --password-stdin
+                        docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}
+                        docker push ${DOCKER_IMAGE}:latest
                     """
                 }
             }
@@ -41,17 +40,22 @@ pipeline {
         stage('Deploy to EKS') {
             steps {
                 sh """
-                   aws eks --region ${AWS_REGION} update-kubeconfig --name flask-eks
-                   kubectl apply -f k8s/ -n ${K8S_NAMESPACE}
-                   kubectl rollout status deployment/flask-deployment -n ${K8S_NAMESPACE}
+                    # Update kubeconfig for EKS
+                    aws eks --region ${AWS_REGION} update-kubeconfig --name flask-eks
+
+                    # Safe redeploy (delete old, apply new)
+                    kubectl delete deployment flask-deployment -n ${K8S_NAMESPACE} --ignore-not-found
+                    kubectl apply -f /var/lib/jenkins/workspace/rest-api/k8s/ -n ${K8S_NAMESPACE}
+                    kubectl rollout status deployment/flask-deployment -n ${K8S_NAMESPACE}
+
+                    # Print LoadBalancer URL
+                    echo "-------------------------------------------------------"
+                    echo "🌍 Checking LoadBalancer Service External IP..."
+                    LB_URL=$(kubectl get svc flask-service -n ${K8S_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+                    echo "✅ Your Flask app is available at: http://$LB_URL"
+                    echo "-------------------------------------------------------"
                 """
             }
-        }
-    }
-
-    post {
-        always {
-            sh 'docker system prune -af || true'
         }
     }
 }
