@@ -50,9 +50,9 @@ pipeline {
 
                     # Print LoadBalancer URL
                     echo "-------------------------------------------------------"
-                    echo "🌍 Checking LoadBalancer Service External IP..."
+                    echo " Checking LoadBalancer Service External IP..."
                     LB_URL=$(kubectl get svc flask-service -n ${K8S_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-                    echo "✅ Your Flask app is available at: http://$LB_URL"
+                    echo " Your Flask app is available at: http://$LB_URL"
                     echo "-------------------------------------------------------"
                 """
             }
