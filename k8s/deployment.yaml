@@ -25,15 +25,13 @@ spec:
             httpGet:
               path: /
               port: 5000
-            initialDelaySeconds: 20   # wait before first probe
-            periodSeconds: 10         # check every 10s
-            timeoutSeconds: 3
-            failureThreshold: 5       # only fail if 5 checks fail
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
           livenessProbe:
             httpGet:
               path: /
               port: 5000
-            initialDelaySeconds: 40   # wait longer before liveness kicks in
-            periodSeconds: 20
-            timeoutSeconds: 5
+            initialDelaySeconds: 20
+            periodSeconds: 10
             failureThreshold: 3
