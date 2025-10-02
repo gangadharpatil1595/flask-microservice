@@ -3,18 +3,23 @@ kind: Deployment
 metadata:
   name: flask-deployment
   namespace: flask-app
+labels:
+  app: flask
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: flask-app
+      app: flask
   template:
     metadata:
       labels:
-        app: flask-app
+        app: flask
     spec:
       containers:
-      - name: flask-container
-        image: gangadhar369/flask-microservice:latest
-        ports:
-        - containerPort: 5000
+        - name: flask
+          image: gangadhar369/flask-microservice:latest
+          ports:
+            - containerPort: 5000
+          env:
+            - name: SKIP_DB
+              value: "true"
