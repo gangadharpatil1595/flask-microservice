@@ -1,63 +1,65 @@
-import os
-from flask import Flask, request, render_template, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for
 import psycopg2
+import os
 
 app = Flask(__name__)
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "dbname=test user=postgres password=postgres host=microservice-db port=5432")
+# Environment variables
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://flaskuser:flaskpass@microservice-db:5432/flaskdb")
+SKIP_DB = os.getenv("SKIP_DB", "false").lower() == "true"
 
 def get_db_connection():
-    conn = psycopg2.connect(DATABASE_URL)
-    return conn
+    if SKIP_DB:
+        print("[INFO] Running in no-DB mode, skipping database connection.")
+        return None
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        return conn
+    except Exception as e:
+        print(f"[WARN] Could not connect to database: {e}")
+        return None
 
 def init_db():
+    if SKIP_DB:
+        print("[INFO] Skipping DB initialization in no-DB mode.")
+        return
     conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            name TEXT NOT NULL
-        );
-    """)
-    conn.commit()
-    cur.close()
-    conn.close()
-
-init_db()
-
-@app.route("/")
-def home():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT id, name FROM users;")
-    users = cur.fetchall()
-    cur.close()
-    conn.close()
-    return render_template("index.html", users=users)
-
-@app.route("/add", methods=["POST"])
-def add_user():
-    name = request.form.get("name")
-    if name:
-        conn = get_db_connection()
+    if conn:
         cur = conn.cursor()
-        cur.execute("INSERT INTO users (name) VALUES (%s);", (name,))
+        # Example table init
+        cur.execute("CREATE TABLE IF NOT EXISTS messages (id serial PRIMARY KEY, content text);")
         conn.commit()
         cur.close()
         conn.close()
-    return redirect(url_for("home"))
 
-@app.route("/delete/<int:user_id>")
-def delete_user(user_id):
+@app.route('/')
+def index():
+    if SKIP_DB:
+        return "✅ Flask app is running in no-DB mode!", 200
+    conn = get_db_connection()
+    if not conn:
+        return "⚠️ DB unavailable", 500
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM messages;")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return f"Messages: {rows}"
+
+@app.route('/add', methods=['POST'])
+def add_message():
+    if SKIP_DB:
+        return "❌ DB disabled in this deployment", 200
+    content = request.form['content']
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("DELETE FROM users WHERE id = %s;", (user_id,))
+    cur.execute("INSERT INTO messages (content) VALUES (%s)", (content,))
     conn.commit()
     cur.close()
     conn.close()
-    return redirect(url_for("home"))
+    return redirect(url_for('index'))
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
-
-
+if __name__ == '__main__':
+    if not SKIP_DB:
+        init_db()
+    app.run(host='0.0.0.0', port=5000)
