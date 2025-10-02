@@ -2,23 +2,22 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = "gangadhar369/myapp"
-        DOCKER_TAG = "latest"
+        DOCKER_IMAGE = "gangadhar369/flask-microservice"
+        DOCKER_TAG   = "latest"
     }
 
     stages {
         stage('Checkout') {
             steps {
-                'git branch: 'main', url: 'https://github.com/gangadharpatil1595/flask-microservice.git'}
-
+                git branch: 'main',
+                    url: 'https://github.com/gangadharpatil1595/flask-microservice.git',
+                    credentialsId: 'github-cred'
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                script {
-                    sh 'docker build -t $DOCKER_IMAGE:$DOCKER_TAG .'
-                }
+                sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
             }
         }
 
@@ -28,8 +27,8 @@ pipeline {
                                                  usernameVariable: 'DOCKER_USER',
                                                  passwordVariable: 'DOCKER_PASS')]) {
                     sh """
-                       echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                       docker push $DOCKER_IMAGE:$DOCKER_TAG
+                        echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
+                        docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
                     """
                 }
             }
