@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         DOCKER_IMAGE   = "gangadhar369/flask-microservice"
-        DOCKER_CRED_ID = "dockerhub-cred"      // your DockerHub credentials ID in Jenkins
+        DOCKER_CRED_ID = "dockerhub-cred"      // Jenkins DockerHub credentials ID
         AWS_REGION     = "ap-south-1"
         K8S_NAMESPACE  = "flask-app"
     }
@@ -37,23 +37,25 @@ pipeline {
             }
         }
 
-       stage('Deploy to EKS') {
-    steps {
-        sh """
-            # Update kubeconfig for EKS
-            aws eks --region ${AWS_REGION} update-kubeconfig --name flask-eks
+        stage('Deploy to EKS') {
+            steps {
+                sh """
+                    # Update kubeconfig for EKS
+                    aws eks --region ${AWS_REGION} update-kubeconfig --name flask-eks
 
-            # Safe redeploy (delete old, apply new)
-            kubectl delete deployment flask-deployment -n ${K8S_NAMESPACE} --ignore-not-found
-            kubectl apply -f /var/lib/jenkins/workspace/rest-api/k8s/ -n ${K8S_NAMESPACE}
-            kubectl rollout status deployment/flask-deployment -n ${K8S_NAMESPACE}
+                    # Safe redeploy (delete old, apply new)
+                    kubectl delete deployment flask-deployment -n ${K8S_NAMESPACE} --ignore-not-found
+                    kubectl apply -f /var/lib/jenkins/workspace/rest-api/k8s/ -n ${K8S_NAMESPACE}
+                    kubectl rollout status deployment/flask-deployment -n ${K8S_NAMESPACE}
 
-            # Print LoadBalancer URL
-            echo "-------------------------------------------------------"
-            echo "Checking LoadBalancer Service External IP..."
-            LB_URL=\$(kubectl get svc flask-service -n ${K8S_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-            echo "Your Flask app is available at: http://$LB_URL"
-            echo "-------------------------------------------------------"
-        """
+                    # Print LoadBalancer URL
+                    echo "-------------------------------------------------------"
+                    echo "🌍 Checking LoadBalancer Service External IP..."
+                    LB_URL=\$(kubectl get svc flask-service -n ${K8S_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+                    echo "✅ Your Flask app is available at: http://$LB_URL"
+                    echo "-------------------------------------------------------"
+                """
+            }
+        }
     }
 }
