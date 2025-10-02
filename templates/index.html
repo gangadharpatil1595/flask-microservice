@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Microservice Users</title>
+</head>
+<body>
+    <h1>Users List</h1>
+    <form method="POST" action="/add">
+        <input type="text" name="name" placeholder="Enter name" required>
+        <button type="submit">Add User</button>
+    </form>
+    <ul>
+        {% for id, name in users %}
+        <li>{{ name }} 
+            <a href="/delete/{{ id }}">[Delete]</a>
+        </li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
+

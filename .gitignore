@@ -1,0 +1,25 @@
+# Python cache and bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Logs
+*.log
+app.log
+
+# Virtual environments
+venv/
+.env
+
+# Docker volumes & database files
+postgres_data/
+*.db
+
+# IDE / editor configs
+.vscode/
+.idea/
+
+# System files
+.DS_Store
+Thumbs.db
