@@ -9,6 +9,5 @@ spec:
     app: flask
   ports:
     - protocol: TCP
-      port: 80          # External port (LoadBalancer)
-      targetPort: 5000  # Flask app container port
-
+      port: 80          # Exposed to the ELB
+      targetPort: 5000  # Flask app's container port
