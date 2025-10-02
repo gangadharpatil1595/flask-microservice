@@ -9,7 +9,8 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/your-user/your-repo.git'
+                'git branch: 'main', url: 'https://github.com/gangadharpatil1595/flask-microservice.git'
+
             }
         }
 
