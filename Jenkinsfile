@@ -60,19 +60,19 @@ pipeline {
       }
     }
 
-    stage('Update K8s Manifests with New Image') {
+    stage('Generate K8s Manifests') {
       steps {
         script {
           sh '''
-            echo ">>> Updating manifests with new image tag..."
+            echo ">>> Generating Kubernetes manifests..."
             mkdir -p ${K8S_DIR}
-            if [ ! -f ${K8S_DIR}/deployment.yaml ]; then
-              echo ">>> Creating default deployment manifest..."
-              cat <<EOF > ${K8S_DIR}/deployment.yaml
+
+            # --- Deployment YAML ---
+            cat <<EOF > ${K8S_DIR}/deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: flask-microservice
+  name: flask-deployment
   labels:
     app: flask-microservice
 spec:
@@ -91,11 +91,9 @@ spec:
         ports:
         - containerPort: 5000
 EOF
-            fi
 
-            # Service manifest
-            if [ ! -f ${K8S_DIR}/service.yaml ]; then
-              cat <<EOF > ${K8S_DIR}/service.yaml
+            # --- Service YAML ---
+            cat <<EOF > ${K8S_DIR}/service.yaml
 apiVersion: v1
 kind: Service
 metadata:
@@ -109,7 +107,6 @@ spec:
     targetPort: 5000
   type: LoadBalancer
 EOF
-            fi
           '''
         }
       }
@@ -119,9 +116,9 @@ EOF
       steps {
         withAWS(credentials: env.AWS_CRED_ID, region: env.AWS_REGION) {
           sh '''
+            echo ">>> Deploying to EKS..."
             export KUBECONFIG=${KUBECONFIG}
             kubectl get ns ${NAMESPACE} || kubectl create ns ${NAMESPACE}
-            echo ">>> Deploying application to EKS..."
             kubectl apply -f ${K8S_DIR}/deployment.yaml -n ${NAMESPACE}
             kubectl apply -f ${K8S_DIR}/service.yaml -n ${NAMESPACE}
           '''
@@ -135,7 +132,9 @@ EOF
           sh '''
             echo ">>> Waiting for pods to be ready..."
             export KUBECONFIG=${KUBECONFIG}
-            kubectl rollout status deployment/flask-microservice -n ${NAMESPACE} --timeout=180s
+            kubectl rollout status deployment/flask-deployment -n ${NAMESPACE} --timeout=180s
+            echo ">>> Checking service and pods..."
+            kubectl get pods -n ${NAMESPACE}
             kubectl get svc -n ${NAMESPACE}
             echo "✅ Deployment successful and service available!"
           '''
