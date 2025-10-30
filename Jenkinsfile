@@ -12,7 +12,7 @@ pipeline {
     KUBECONFIG        = "${WORKSPACE}/kubeconfig"
     DOCKER_CRED_ID    = 'dockerhub-creds'
     AWS_CRED_ID       = 'aws-creds'
-    HELM_CHART_PATH   = './k8s'     // ✅ your Helm chart folder
+    HELM_CHART_PATH   = './k8s'    // ✅ Helm chart folder OR YAML folder
   }
 
   stages {
@@ -61,18 +61,25 @@ pipeline {
       }
     }
 
-    stage('Deploy using Helm') {
+    stage('Deploy to EKS (Helm or Fallback)') {
       steps {
         withAWS(credentials: "${AWS_CRED_ID}", region: "${AWS_REGION}") {
           sh '''
-            echo ">>> Deploying Helm release to EKS..."
+            echo ">>> Starting deployment on EKS..."
             export KUBECONFIG=${KUBECONFIG}
-            cd ${WORKSPACE}
-            helm upgrade --install ${RELEASE_NAME} ${HELM_CHART_PATH} \
-              --namespace ${NAMESPACE} --create-namespace \
-              --set image.repository=${DOCKER_USER}/${IMAGE_NAME} \
-              --set image.tag=${IMAGE_TAG} \
-              --wait --timeout 5m
+
+            if [ -f "${HELM_CHART_PATH}/Chart.yaml" ]; then
+              echo ">>> Helm chart found. Deploying using Helm..."
+              helm upgrade --install ${RELEASE_NAME} ${HELM_CHART_PATH} \
+                --namespace ${NAMESPACE} --create-namespace \
+                --set image.repository=${DOCKER_USER}/${IMAGE_NAME} \
+                --set image.tag=${IMAGE_TAG} \
+                --wait --timeout 5m || exit 1
+            else
+              echo "⚠️ Helm chart not found, applying YAML manifests directly..."
+              kubectl create namespace ${NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
+              kubectl apply -f ${HELM_CHART_PATH}/ -n ${NAMESPACE} --validate=false
+            fi
           '''
         }
       }
@@ -86,7 +93,7 @@ pipeline {
             export KUBECONFIG=${KUBECONFIG}
             kubectl get pods -n ${NAMESPACE}
             kubectl get svc -n ${NAMESPACE}
-            helm list -n ${NAMESPACE}
+            helm list -n ${NAMESPACE} || echo "Helm list skipped (no release found)"
           '''
         }
       }
@@ -95,16 +102,19 @@ pipeline {
 
   post {
     success {
-      echo "✅ Helm deployment succeeded! Build: ${env.BUILD_NUMBER}"
+      echo "✅ Deployment successful! Build #${env.BUILD_NUMBER} is live."
     }
-
     failure {
-      echo "❌ Build or deployment failed. Performing rollback..."
+      echo "❌ Deployment failed. Attempting Helm rollback if applicable..."
       withAWS(credentials: "${AWS_CRED_ID}", region: "${AWS_REGION}") {
         sh '''
           export KUBECONFIG=${KUBECONFIG}
-          echo ">>> Rolling back Helm release..."
-          helm rollback ${RELEASE_NAME} || echo "⚠️ Nothing to rollback yet."
+          if helm status ${RELEASE_NAME} -n ${NAMESPACE} >/dev/null 2>&1; then
+            echo ">>> Rolling back Helm release..."
+            helm rollback ${RELEASE_NAME} || echo "⚠️ Rollback failed."
+          else
+            echo "⚠️ Nothing to rollback — Helm release not found."
+          fi
         '''
       }
     }
