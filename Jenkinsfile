@@ -2,17 +2,17 @@ pipeline {
   agent any
 
   environment {
-    DOCKERHUB_CRED_ID = 'dockerhub-creds'
-    AWS_CRED_ID       = 'aws-creds'
-    AWS_REGION        = 'us-west-2'
-    CLUSTER_NAME      = 'my-eks-cluster'
     DOCKER_USER       = 'gangadhar369'
     IMAGE_NAME        = 'flask-microservice'
     IMAGE_TAG         = "${env.BUILD_NUMBER}"
-    KUBECONFIG        = "${WORKSPACE}/kubeconfig"
+    AWS_REGION        = 'us-west-2'
+    CLUSTER_NAME      = 'my-eks-cluster'
     RELEASE_NAME      = 'flask-app'
     NAMESPACE         = 'flask-app'
-    HELM_CHART_PATH   = './helm'
+    KUBECONFIG        = "${WORKSPACE}/kubeconfig"
+    DOCKER_CRED_ID    = 'dockerhub-creds'
+    AWS_CRED_ID       = 'aws-creds'
+    HELM_CHART_PATH   = './k8s'     // ✅ your Helm chart folder
   }
 
   stages {
@@ -36,10 +36,10 @@ pipeline {
 
     stage('Push Docker Image to DockerHub') {
       steps {
-        withCredentials([usernamePassword(credentialsId: env.DOCKERHUB_CRED_ID, usernameVariable: 'DU', passwordVariable: 'DP')]) {
+        withCredentials([usernamePassword(credentialsId: "${DOCKER_CRED_ID}", usernameVariable: 'DU', passwordVariable: 'DP')]) {
           sh '''
             echo ">>> Logging into DockerHub..."
-            echo "$DP" | docker login -u "$DU" --password-stdin
+            echo $DP | docker login -u $DU --password-stdin
             echo ">>> Pushing images..."
             docker push ${DOCKER_USER}/${IMAGE_NAME}:${IMAGE_TAG}
             docker push ${DOCKER_USER}/${IMAGE_NAME}:latest
@@ -50,7 +50,7 @@ pipeline {
 
     stage('Configure kubeconfig') {
       steps {
-        withAWS(region: "${env.AWS_REGION}", credentials: "${env.AWS_CRED_ID}") {
+        withAWS(credentials: "${AWS_CRED_ID}", region: "${AWS_REGION}") {
           sh '''
             echo ">>> Setting up kubeconfig for EKS cluster..."
             aws eks update-kubeconfig --region ${AWS_REGION} --name ${CLUSTER_NAME} --kubeconfig ${KUBECONFIG}
@@ -63,12 +63,11 @@ pipeline {
 
     stage('Deploy using Helm') {
       steps {
-        withAWS(region: "${env.AWS_REGION}", credentials: "${env.AWS_CRED_ID}") {
+        withAWS(credentials: "${AWS_CRED_ID}", region: "${AWS_REGION}") {
           sh '''
             echo ">>> Deploying Helm release to EKS..."
             export KUBECONFIG=${KUBECONFIG}
-
-            # Set dynamic image tag in Helm
+            cd ${WORKSPACE}
             helm upgrade --install ${RELEASE_NAME} ${HELM_CHART_PATH} \
               --namespace ${NAMESPACE} --create-namespace \
               --set image.repository=${DOCKER_USER}/${IMAGE_NAME} \
@@ -81,23 +80,33 @@ pipeline {
 
     stage('Post Deployment Check') {
       steps {
-        sh '''
-          export KUBECONFIG=${KUBECONFIG}
-          echo ">>> Checking pod and service status..."
-          kubectl get pods -n ${NAMESPACE}
-          kubectl get svc -n ${NAMESPACE}
-          helm list -n ${NAMESPACE}
-        '''
+        withAWS(credentials: "${AWS_CRED_ID}", region: "${AWS_REGION}") {
+          sh '''
+            echo ">>> Verifying deployment..."
+            export KUBECONFIG=${KUBECONFIG}
+            kubectl get pods -n ${NAMESPACE}
+            kubectl get svc -n ${NAMESPACE}
+            helm list -n ${NAMESPACE}
+          '''
+        }
       }
     }
   }
 
   post {
     success {
-      echo "✅ Helm deployment succeeded for build ${env.BUILD_NUMBER}"
+      echo "✅ Helm deployment succeeded! Build: ${env.BUILD_NUMBER}"
     }
+
     failure {
-      echo "❌ Build or deployment failed. Check Jenkins logs."
+      echo "❌ Build or deployment failed. Performing rollback..."
+      withAWS(credentials: "${AWS_CRED_ID}", region: "${AWS_REGION}") {
+        sh '''
+          export KUBECONFIG=${KUBECONFIG}
+          echo ">>> Rolling back Helm release..."
+          helm rollback ${RELEASE_NAME} || echo "⚠️ Nothing to rollback yet."
+        '''
+      }
     }
   }
 }
