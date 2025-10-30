@@ -4,7 +4,7 @@ pipeline {
     environment {
         DOCKER_IMAGE   = "gangadhar369/flask-microservice"
         DOCKER_CRED_ID = "dockerhub-cred"      // Jenkins DockerHub credentials ID
-        AWS_REGION     = "ap-south-1"
+        AWS_REGION     = "us-west-2"
         K8S_NAMESPACE  = "flask-app"
     }
 
